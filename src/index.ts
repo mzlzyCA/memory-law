@@ -1,3 +1,9 @@
 #!/usr/bin/env bun
 
-console.log("memory-law CLI is ready.");
+export function getWelcomeMessage(): string {
+  return "memory-law CLI is ready.";
+}
+
+if (import.meta.main) {
+  console.log(getWelcomeMessage());
+}
