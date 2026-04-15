@@ -1,0 +1,25 @@
+{
+  "name": "memory-law",
+  "version": "0.1.0",
+  "description": "CLI conversation tool for Memory Law, built with pnpm and Bun.",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "test": "bun test",
+    "build": "bun build ./src/index.ts --outdir dist",
+    "type-check": "pnpm exec tsc --noEmit",
+    "postinstall": "bun scripts/setup.ts"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "dotenv": "^17.2.3",
+    "openai": "^6.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "typescript": "^5.9.3"
+  }
+}

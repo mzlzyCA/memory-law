@@ -1,0 +1,4 @@
+[install]
+exact = false
+frozenLockfile = false
+saveTextLockfile = true
