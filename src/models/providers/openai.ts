@@ -1,0 +1,40 @@
+import OpenAI from "openai";
+
+import {
+  composeSystemPrompt,
+  type BaseModelProvider,
+  type ModelRequest,
+  type ModelResponse,
+} from "../baseModel";
+
+export class OpenAIProvider implements BaseModelProvider {
+  public readonly name = "openai";
+  private readonly client: OpenAI;
+
+  constructor(apiKey: string = process.env.OPENAI_API_KEY ?? "") {
+    if (!apiKey) {
+      throw new Error("Missing OPENAI_API_KEY for OpenAI provider.");
+    }
+    this.client = new OpenAI({ apiKey });
+  }
+
+  async generate(request: ModelRequest): Promise<ModelResponse> {
+    const systemPrompt = composeSystemPrompt(request.systemPrompt, request.metadata);
+    const response = await this.client.responses.create({
+      model: request.model,
+      input: [
+        ...(systemPrompt
+          ? [{ role: "system" as const, content: [{ type: "input_text" as const, text: systemPrompt }] }]
+          : []),
+        { role: "user" as const, content: [{ type: "input_text" as const, text: request.prompt }] },
+      ],
+      temperature: request.temperature,
+      max_output_tokens: request.maxTokens,
+    });
+
+    return {
+      text: response.output_text ?? "",
+      raw: response,
+    };
+  }
+}
