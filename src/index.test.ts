@@ -11,7 +11,7 @@ import {
   getAgentSessionTmpDir,
   getCliStorageDir,
   persistAgentSession,
-} from "./storage";
+} from "./writefile";
 import type { AgentMessage } from "./types/messages";
 
 describe("getWelcomeMessage", () => {

@@ -1,5 +1,5 @@
 import { query } from "./query";
-import { persistAgentSession } from "./storage";
+import { persistAgentSession } from "./writefile";
 
 export interface AgentParams {
   model: string;

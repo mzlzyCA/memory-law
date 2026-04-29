@@ -92,7 +92,7 @@ function resolveValueType(value: unknown): "string" | "number" | "boolean" | "ob
   return "unknown";
 }
 
-export function validateToolResult(
+export function validateToolResult( //ToCheck
   output: Record<string, unknown>,
   schemaInput?: unknown,
 ): { valid: boolean; errors: string[] } {

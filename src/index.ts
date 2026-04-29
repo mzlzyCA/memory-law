@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { ensureCliStorageDirs, getAgentSessionTmpDir, getCliStorageDir } from "./storage";
+import { ensureCliStorageDirs, getAgentSessionTmpDir, getCliStorageDir } from "./writefile";
 
 export function getWelcomeMessage(): string {
   return "memory-law CLI is ready.";
