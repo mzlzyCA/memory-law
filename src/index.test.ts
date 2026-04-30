@@ -65,18 +65,24 @@ describe("storage paths", () => {
 
     const messages: AgentMessage[] = [
       {
-        id: "m-1",
+        uuid: "m-1",
         type: "message",
-        createdAt: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
+        message: {
+          role: "user",
+          content: "hello",
+        },
         message_type: "user_prompt",
-        content: "hello",
       },
       {
-        id: "m-2",
+        uuid: "m-2",
         type: "ui_message",
-        createdAt: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
+        message: {
+          role: "assistant",
+          content: "hi",
+        },
         uiType: "cli_message",
-        content: "hi",
       },
     ];
 

@@ -1,25 +1,81 @@
 import { z } from "zod";
 
-export type MessageType = "message" | "tool_use" | "tool_result" | "ui_message";
+export type UUID = string;
+
+export type MessageRole = "user" | "assistant" | "system" | "tool";
+
+export type ContentBlockParam = Record<string, unknown>;
+
+export type PermissionMode = "default" | "acceptEdits" | "bypassPermissions";
+
+export type MessageOrigin = string;
+
+export type PartialCompactDirection = "forward" | "backward";
+
+export type MessageType = "user" | "tool_use" | "tool_result" | "ui_message";
 
 export type PromptMessageType = "systemprompt" | "user_prompt";
 
 export type UiMessageType = "pop_up_message" | "cli_message";
 
 export interface BaseMessage {
-  id: string;
+  uuid: UUID;
   type: MessageType;
-  createdAt: string;
+  message: {
+    role: MessageRole;
+    content: string | ContentBlockParam[];
+  };
+  timestamp: string;
 }
 
-export interface PromptMessage extends BaseMessage {
-  type: "message";
-  message_type: PromptMessageType;
-  content: string;
+// export interface PromptMessage extends BaseMessage {
+//   type: "message";
+//   message: {
+//     role: "user" | "assistant" | "system";
+//     content: string | ContentBlockParam[];
+//   };
+//   message_type: PromptMessageType;
+// }
+
+// User message shape aligned with the createUserMessage-derived protocol.
+export interface UserMessage extends BaseMessage {
+  type: "user";
+  message: {
+    role: "user";
+    content: string | ContentBlockParam[];
+  };
+
+  // Identity discriminator fields.
+  // isMeta?: true;
+  // isVisibleInTranscriptOnly?: true;
+  // isVirtual?: true;
+  // isCompactSummary?: true;
+
+  // Tool-result related fields.
+  toolUseResult?: unknown;
+  // mcpMeta?: {
+  //   _meta?: Record<string, unknown>;
+  //   structuredContent?: Record<string, unknown>;
+  // };
+  sourceToolAssistantUUID?: UUID;
+
+  // Additional metadata fields.
+  // imagePasteIds?: number[];
+  // permissionMode?: PermissionMode;
+  origin?: MessageOrigin;
+  summarizeMetadata?: {
+    messagesSummarized: number;
+    userContext?: string;
+    direction?: PartialCompactDirection;
+  };
 }
 
 export interface ToolUseMessage extends BaseMessage {
   type: "tool_use";
+  message: {
+    role: "assistant";
+    content: string | ContentBlockParam[];
+  };
   toolName: string;
   toolCallId: string;
   input: Record<string, unknown>;
@@ -32,6 +88,10 @@ export interface ToolResultSchema {
 
 export interface ToolResultMessage extends BaseMessage {
   type: "tool_result";
+  message: {
+    role: "tool";
+    content: string | ContentBlockParam[];
+  };
   toolName: string;
   toolCallId: string;
   output: Record<string, unknown>;
@@ -40,27 +100,28 @@ export interface ToolResultMessage extends BaseMessage {
 
 export interface UiPopUpMessage extends BaseMessage {
   type: "ui_message";
+  message: {
+    role: "assistant" | "system";
+    content: string | ContentBlockParam[];
+  };
   uiType: "pop_up_message";
   title: string;
   summary?: string;
-  content: string;
 }
 
 export interface UiCliMessage extends BaseMessage {
   type: "ui_message";
+  message: {
+    role: "assistant" | "system";
+    content: string | ContentBlockParam[];
+  };
   uiType: "cli_message";
-  content: string;
-  // Reserved for pi-core-like special rendering (card/rich blocks).
-  blocks?: Array<Record<string, unknown>>;
+  blocks?: Array<Record<string, unknown>>; // Reserved for pi-core-like special rendering.
 }
 
 export type UiMessage = UiPopUpMessage | UiCliMessage;
 
-export type AgentMessage =
-  | PromptMessage
-  | ToolUseMessage
-  | ToolResultMessage
-  | UiMessage;
+export type AgentMessage = UserMessage | PromptMessage | ToolUseMessage | ToolResultMessage | UiMessage;
 
 export const toolResultSchema = z.object({
   requiredKeys: z.array(z.string()).optional(),
@@ -92,7 +153,7 @@ function resolveValueType(value: unknown): "string" | "number" | "boolean" | "ob
   return "unknown";
 }
 
-export function validateToolResult( //ToCheck
+export function validateToolResult(
   output: Record<string, unknown>,
   schemaInput?: unknown,
 ): { valid: boolean; errors: string[] } {

@@ -14,75 +14,21 @@ export interface HooksSettings {
 }
 
 export interface BaseAgent {
-  /**
-   * The type identifier for this agent.
-   */
-  agentType: string;
-
-  /**
-   * Tools available to this agent.
-   */
-  tools?: string[];
-
-  /**
-   * Tool name patterns that are explicitly allowed.
-   */
-  allowedTools?: string[];
-
-  /**
-   * Skill names to preload (parsed from comma-separated frontmatter todolist).
-   */
-  skills?: string[];
-
-  /**
-   * MCP servers specific to this agent todolist.
-   */
-  mcpServers?: AgentMcpServer[];
-
-  /**
-   * MCP server name patterns that must be configured for the agent to be available.
-   */
-  allowedMcpServers?: string[];
-
-  /**
-   * Session-scoped hooks registered when the agent starts.
-   */
-  hooks?: HooksSettings;
-
-  /**
-   * The model to use (e.g., "gemini:gemini-2.0-flash").
-   */
-  model: string;
-
-  /**
-   * Computational effort level for the model.
-   */
-  effort?: EffortValue;
-
-  /**
-   * Maximum number of agentic turns before stopping.
-   */
-  maxTurns?: number;
-
-  /**
-   * The base directory for the agent's operations.
-   */
-  baseDir?: string;
-
-  /**
-   * Prepended to the first user turn (slash commands work).
-   */
-  initialPrompt?: string;
-
-  /**
-   * Persistent memory scope todolist.
-   */
-  memory?: AgentMemoryScope;
+  agentType: string; // The type identifier for this agent.
+  tools?: string[]; // Tools available to this agent.
+  allowedTools?: string[]; // Tool name patterns that are explicitly allowed.
+  skills?: string[]; // Skill names to preload (parsed from comma-separated frontmatter todolist).
+  mcpServers?: AgentMcpServer[]; // MCP servers specific to this agent todolist.
+  allowedMcpServers?: string[]; // MCP server name patterns that must be configured for the agent to be available.
+  hooks?: HooksSettings; // Session-scoped hooks registered when the agent starts.
+  model: string; // The model to use (e.g., "gemini:gemini-2.0-flash").
+  effort?: EffortValue; // Computational effort level for the model.
+  maxTurns?: number; // Maximum number of agentic turns before stopping.
+  baseDir?: string; // The base directory for the agent's operations.
+  initialPrompt?: string; // Prepended to the first user turn (slash commands work).
+  memory?: AgentMemoryScope; // Persistent memory scope todolist.
 }
 
-/**
- * Default configuration values for a BaseAgent.
- */
 export const DEFAULT_AGENT_CONFIG: Partial<BaseAgent> = {
   maxTurns: 30,
   effort: "medium",

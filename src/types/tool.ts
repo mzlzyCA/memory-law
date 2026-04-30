@@ -1,11 +1,12 @@
 import { z } from "zod";
 import type { AgentMessage as Message } from "./messages"; // TODO: confirm final Message source type
+import type { GlobalState } from "../storage/globalState";
 
 export type AgentId = string;
 
 export type AnyObject = z.AnyZodObject;
 
-export type AppState = Record<string, unknown>;
+export type AppState = GlobalState;
 
 export type FileStateCache = Map<string, unknown>;
 
@@ -38,6 +39,16 @@ export interface AssistantMessage {
   createdAt?: string;
 }
 
+export class InputValidationError extends Error {
+  readonly issues: z.ZodIssue[];
+
+  constructor(message: string, issues: z.ZodIssue[]) {
+    super(message);
+    this.name = "InputValidationError";
+    this.issues = issues;
+  }
+}
+
 export type ToolResult<Output = unknown> =
   | { ok: true; output: Output }
   | { ok: false; error: string; output?: Output };
@@ -48,6 +59,22 @@ export type CanUseToolFn = (
 ) => boolean | Promise<boolean>;
 
 export type Tools = Record<string, Tool>;
+
+export type PreToolUseHookEvent =
+  | { type: "message"; message: string }
+  | { type: "hookPermissionResult"; result: PermissionResult }
+  | { type: "hookUpdatedInput"; input: Record<string, unknown> }
+  | { type: "preventContinuation"; reason?: string }
+  | { type: "stop"; result: ToolResult<unknown> };
+
+export type RunPreToolUseHooks = (
+  args: {
+    tool: Tool;
+    input: Record<string, unknown>;
+    context: ToolUseContext;
+    parentMessage: AssistantMessage;
+  },
+) => AsyncIterable<PreToolUseHookEvent>;
 
 export type ToolUseContext = {
   options: {
