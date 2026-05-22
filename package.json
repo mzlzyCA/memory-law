@@ -4,14 +4,18 @@
   "description": "CLI conversation tool for Memory Law, built with pnpm and Bun.",
   "private": true,
   "type": "module",
+  "bin": {
+    "memory-law": "src/index.ts"
+  },
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
+    "cli": "bun src/index.ts",
     "test:myprovider": "bun src/scripts/testMyProvider.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "bun build ./src/index.ts --outdir dist",
+    "build": "bun build ./src/index.ts --target=node --external=node:* --outdir dist",
     "type-check": "pnpm exec tsc --noEmit",
     "postinstall": "command -v bun >/dev/null 2>&1 && bun scripts/setup.ts || echo \"bun not found, skip postinstall\""
   },
