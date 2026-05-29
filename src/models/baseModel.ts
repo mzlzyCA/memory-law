@@ -16,6 +16,7 @@ export interface ModelResponse {
 
 export interface BaseModelProvider {
   readonly name: string;
+  getContextWindow(model: string): number;
   callModel(request: ModelRequest): Promise<ModelResponse>;
 }
 

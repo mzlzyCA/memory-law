@@ -11,6 +11,13 @@ export class MyProvider implements BaseModelProvider {
   public readonly name = "myprovider";
   private readonly client: OpenAI;
 
+  getContextWindow(model: string): number {
+    if (model.includes("gpt-4o") || model.includes("gpt-5")) {
+      return 128_000;
+    }
+    return 32_000;
+  }
+
   constructor(
     apiKey: string = process.env.OPENAI_API_KEY ?? "",
     baseURL: string = process.env.OPENAI_PROXY_BASE_URL ?? "https://api.openai-proxy.org/v1",

@@ -61,3 +61,38 @@
   - `src/tools/runTool.ts`
 - [ ] 待办：补全 `injectSkills`、message 分类注入细节、post 处理分类路由
 - [ ] 待办：修复仓库现存 TS 错误（`src/types/messages.ts` 的 `PromptMessage`、`src/tools/runTool.test.ts` mock 类型）
+
+### TODO 细化清单（来自代码注释）
+
+- [ ] `src/query.ts` `injectSkills`
+  - 在模型调用前把 runtime skills 注入到 `toolUseContext`
+  - 明确 skill 元数据结构（名称、能力、优先级、注入策略）
+  - 约束注入时机（每轮注入 / 首轮注入 / 按工具触发）
+- [ ] `src/query.ts` `injectToolUseContextIntoMessages`
+  - 按消息类型分类注入上下文：`user` / `tool_use` / `tool_result` / `ui_message`
+  - 设计不同类型的注入模板，避免统一文本污染对话上下文
+  - 约束注入大小与顺序，避免 prompt 过长
+- [ ] `src/query.ts` `postProcessModelReply`
+  - 细化“模型回复插入消息队列”的路由规则，替代当前 append-only
+  - 对 `assistant` 文本、`tool_use`、异常回复分别定义落位规则
+  - 增加错误回复与半结构化回复的兜底路径
+- [ ] `src/services/compact/defaultCompact.ts` `Defaultcompact`
+  - 保留 system/user 锚点消息
+  - 保留未闭环的 tool_use/tool_result 链路
+  - 保留安全/权限相关关键上下文
+  - 增加可配置 compact 策略（按条数、按 token、按优先级）
+- [ ] `src/services/compact/defaultCompact.ts` `shouldCompact` 具体逻辑
+  - 总开关：`config.enabled !== false` 时才允许压缩
+  - Token 统计：对全部消息累计 `countMessagesTokens(messages, tokenCounter)`
+  - 有效窗口：`effective = contextWindow - summaryReservedTokens`
+  - 触发阈值：`threshold = effective - compactBufferTokens`（默认缓冲 `13000`）
+  - 触发条件：`totalTokens > threshold` 时返回 `true`
+  - 安全下界：窗口与阈值使用 `Math.max(0, ...)` 避免负数
+- [ ] `autoCompact`（自动压缩调度）
+  - 在每轮模型调用前自动执行 `shouldCompact` 判断并触发压缩
+  - 支持按 turn/按 token 增量触发，避免每轮都全量压缩
+  - 增加压缩熔断与重试策略，避免连续压缩导致循环
+- [ ] 每个 agent 独立上下文窗口
+  - 上下文窗口按 agent 维度读取（`agentId + provider + model`），不共用全局窗口
+  - agent 之间独立维护 compact 状态与摘要消息
+  - 当子 agent / 并行 agent 运行时，允许各自独立调用 compact 流程

@@ -13,6 +13,13 @@ export class ClaudeProvider implements BaseModelProvider {
   public readonly name = "claude";
   private readonly apiKey: string;
 
+  getContextWindow(model: string): number {
+    if (model.includes("3.5") || model.includes("3-5")) {
+      return 200_000;
+    }
+    return 200_000;
+  }
+
   constructor(apiKey: string = process.env.ANTHROPIC_API_KEY ?? "") {
     if (!apiKey) {
       throw new Error("Missing ANTHROPIC_API_KEY for Claude provider.");

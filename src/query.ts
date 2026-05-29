@@ -64,16 +64,6 @@ type ParsedModelReply = {
   }>;
 };
 
-type ModelReplyEnvelope = {
-  assistant?: string;
-  tool_calls?: Array<{
-    tool?: string;
-    toolName?: string;
-    toolCallId?: string;
-    input?: Record<string, unknown>;
-  }>;
-};
-
 function isTool(candidate: unknown): candidate is Tool {
   if (!candidate || typeof candidate !== "object") {
     return false;
@@ -92,7 +82,7 @@ function toToolRegistry(rawTools: unknown[]): Tools {
     if (!isTool(candidate)) {
       return acc;
     }
-    if (!candidate.isEnabled()) {
+    if (typeof candidate.isEnabled === "function" && !candidate.isEnabled()) {
       return acc;
     }
     acc[candidate.name] = candidate;
@@ -239,20 +229,31 @@ function parseModelReply(rawText: string): ParsedModelReply {
     };
   }
 
-  const envelope = parsed as ModelReplyEnvelope;
-  const toolCalls = (envelope.tool_calls ?? [])
-    .map((call) => {
-      const toolName = call.toolName ?? call.tool;
-      if (!toolName || typeof toolName !== "string") {
-        return null;
-      }
-      return {
-        toolName,
-        input: call.input ?? {},
-        toolCallId: call.toolCallId ?? randomUUID(),
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null);
+  const envelope = parsed as Record<string, unknown>;
+  const rawToolCalls = Array.isArray(envelope.tool_calls) ? envelope.tool_calls : [];
+  const toolCalls: ParsedModelReply["toolCalls"] = [];
+
+  for (const item of rawToolCalls) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const call = item as Record<string, unknown>;
+    const toolNameValue = call.toolName ?? call.tool;
+    if (typeof toolNameValue !== "string" || toolNameValue.length === 0) {
+      continue;
+    }
+
+    const input =
+      call.input && typeof call.input === "object" && !Array.isArray(call.input)
+        ? (call.input as Record<string, unknown>)
+        : {};
+    const toolCallId = typeof call.toolCallId === "string" ? call.toolCallId : randomUUID();
+    toolCalls.push({
+      toolName: toolNameValue,
+      input,
+      toolCallId,
+    });
+  }
 
   return {
     assistantText:
@@ -285,33 +286,32 @@ function postProcessModelReply(args: {
 
   args.state.messages.push(assistantMessage);
 
-  const arrangedCalls = args.parsed.toolCalls
-    .map((call) => {
-      const tool = args.state.toolUseContext.options.tools[call.toolName];
-      if (!tool) {
-        return null;
-      }
+  const arrangedCalls: ArrangedToolCall[] = [];
+  for (const call of args.parsed.toolCalls) {
+    const tool = args.state.toolUseContext.options.tools[call.toolName];
+    if (!tool) {
+      continue;
+    }
 
-      const toolUseMessage: ToolUseMessage = {
-        uuid: randomUUID(),
-        type: "tool_use",
-        timestamp: new Date().toISOString(),
-        toolName: call.toolName,
-        toolCallId: call.toolCallId,
-        input: call.input,
-        message: {
-          role: "assistant",
-          content: `Tool call requested: ${call.toolName}`,
-        },
-      };
-      args.state.messages.push(toolUseMessage);
+    const toolUseMessage: ToolUseMessage = {
+      uuid: randomUUID(),
+      type: "tool_use",
+      timestamp: new Date().toISOString(),
+      toolName: call.toolName,
+      toolCallId: call.toolCallId,
+      input: call.input,
+      message: {
+        role: "assistant",
+        content: `Tool call requested: ${call.toolName}`,
+      },
+    };
+    args.state.messages.push(toolUseMessage);
 
-      return {
-        tool,
-        input: call.input,
-      };
-    })
-    .filter((item): item is ArrangedToolCall => item !== null);
+    arrangedCalls.push({
+      tool,
+      input: call.input,
+    });
+  }
 
   // TODO: refine insertion targets by message subtype instead of append-only behavior.
   return {
@@ -407,8 +407,14 @@ export async function query(params: QueryParams): Promise<QueryResult> {
 
     injectSkills(stateRef.toolUseContext);
 
-    const sanitized = sanitizeToolResultMessages(stateRef.messages);
-    const compacted = Defaultcompact({ messages: sanitized });
+    const messagesFromQuery = params.state?.messages ?? stateRef.messages;
+    const sanitized = sanitizeToolResultMessages(messagesFromQuery);
+    const compacted = Defaultcompact({
+      messages: sanitized,
+      contextWindow: adapter.getContextWindow(model),
+    });
+    stateRef.messages = compacted;
+    stateRef.toolUseContext.messages = stateRef.messages;
     stateRef.compacted = compacted.length < sanitized.length;
 
     const modelMessages = injectToolUseContextIntoMessages(

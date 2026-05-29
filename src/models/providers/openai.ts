@@ -11,6 +11,13 @@ export class OpenAIProvider implements BaseModelProvider {
   public readonly name = "openai";
   private readonly client: OpenAI;
 
+  getContextWindow(model: string): number {
+    if (model.includes("gpt-4o") || model.includes("gpt-5")) {
+      return 128_000;
+    }
+    return 32_000;
+  }
+
   constructor(apiKey: string = process.env.OPENAI_API_KEY ?? "") {
     if (!apiKey) {
       throw new Error("Missing OPENAI_API_KEY for OpenAI provider.");

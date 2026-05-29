@@ -17,6 +17,13 @@ export class GeminiProvider implements BaseModelProvider {
   public readonly name = "gemini";
   private readonly apiKey: string;
 
+  getContextWindow(model: string): number {
+    if (model.includes("1.5") || model.includes("2.0")) {
+      return 1_000_000;
+    }
+    return 128_000;
+  }
+
   constructor(apiKey: string = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "") {
     if (!apiKey) {
       throw new Error("Missing GEMINI_API_KEY (or GOOGLE_API_KEY) for Gemini provider.");
