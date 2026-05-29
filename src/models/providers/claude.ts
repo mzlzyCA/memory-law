@@ -20,7 +20,7 @@ export class ClaudeProvider implements BaseModelProvider {
     this.apiKey = apiKey;
   }
 
-  async generate(request: ModelRequest): Promise<ModelResponse> {
+  async callModel(request: ModelRequest): Promise<ModelResponse> {
     const systemPrompt = composeSystemPrompt(request.systemPrompt, request.metadata);
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

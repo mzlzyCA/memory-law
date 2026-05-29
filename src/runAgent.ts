@@ -21,23 +21,18 @@ export interface RunAgentResult {
 
 export async function runAgent(params: AgentParams): Promise<RunAgentResult> {
   const outputs: string[] = [];
-  let currentPrompt = params.prompt;
   const startedAt = new Date().toISOString();
-
-  for (let i = 0; i < params.max_iterations; i += 1) {
-    const reply = await query({
-      model: params.model,
-      prompt: currentPrompt,
-      systemPrompt: params.systemPrompt,
-      tools: params.tools,
-      description: params.description,
-      workspacePath: params.workspacePath,
-      iteration: i + 1,
-      maxIterations: params.max_iterations,
-    });
-    outputs.push(reply);
-    currentPrompt = reply;
-  }
+  const result = await query({
+    model: params.model,
+    prompt: params.prompt,
+    systemPrompt: params.systemPrompt,
+    tools: params.tools,
+    description: params.description,
+    workspacePath: params.workspacePath,
+    iteration: 1,
+    maxIterations: params.max_iterations,
+  });
+  outputs.push(...result.outputs);
 
   const endedAt = new Date().toISOString();
   const sessionFilePath = await persistAgentSession({
@@ -56,7 +51,7 @@ export async function runAgent(params: AgentParams): Promise<RunAgentResult> {
   return {
     success: true,
     message: `Agent finished ${params.max_iterations} iterations with model "${params.model}".`,
-    iterationsCompleted: params.max_iterations,
+    iterationsCompleted: outputs.length,
     outputs,
     sessionFilePath,
   };

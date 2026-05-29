@@ -24,7 +24,7 @@ export class GeminiProvider implements BaseModelProvider {
     this.apiKey = apiKey;
   }
 
-  async generate(request: ModelRequest): Promise<ModelResponse> {
+  async callModel(request: ModelRequest): Promise<ModelResponse> {
     const systemPrompt = composeSystemPrompt(request.systemPrompt, request.metadata);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${request.model}:generateContent?key=${this.apiKey}`;
     const response = await fetch(url, {

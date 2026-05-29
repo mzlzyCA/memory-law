@@ -38,3 +38,26 @@
   }
 }
 ```
+
+## 2026-05-29 进展更新
+
+- [x] 重构 `query` 主流程：接入可持续 `state`，包含 `messages`、`toolUseContext`、`CompactTrackingState`、`turncount`、`transitionFlag`
+- [x] 在 `query` 中新增执行环节：
+  - 读取前置 state 并更新可变 `toolUseContext`
+  - 预留 `injectSkills`（TODO）
+  - 发送模型前将 `tool_result` 内容置空以节约 token
+  - 调用默认 compact 流程并注入工具上下文消息
+  - 后处理模型回复并写回消息队列（TODO 已标注细化点）
+  - 调用 `runArrangedTools` 执行工具并写入 `tool_result`
+  - 每轮输出 tool use summary
+  - 增加 `AbortController` 中止检查
+- [x] 新增 compact 服务：`src/services/compact/defaultCompact.ts`
+- [x] 模型接口统一改名：`generate` -> `callModel`
+  - 影响 `src/models/baseModel.ts` 与全部 provider 实现
+  - 同步更新调用点：`src/query.ts`、`src/scripts/testMyProvider.ts`
+- [x] 调整 `runAgent`：改为接收 `query` 的聚合结果（`outputs`）
+- [x] 将无 JSX 的工具实现文件从 `.tsx` 调整为 `.ts`
+  - `src/tools/runArrangedTools.ts`
+  - `src/tools/runTool.ts`
+- [ ] 待办：补全 `injectSkills`、message 分类注入细节、post 处理分类路由
+- [ ] 待办：修复仓库现存 TS 错误（`src/types/messages.ts` 的 `PromptMessage`、`src/tools/runTool.test.ts` mock 类型）

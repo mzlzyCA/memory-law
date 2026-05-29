@@ -24,7 +24,7 @@ export class MyProvider implements BaseModelProvider {
     });
   }
 
-  async generate(request: ModelRequest): Promise<ModelResponse> {
+  async callModel(request: ModelRequest): Promise<ModelResponse> {
     const systemPrompt = composeSystemPrompt(request.systemPrompt, request.metadata);
     const response = await this.client.responses.create({
       model: request.model,

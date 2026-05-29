@@ -16,7 +16,7 @@ export interface ModelResponse {
 
 export interface BaseModelProvider {
   readonly name: string;
-  generate(request: ModelRequest): Promise<ModelResponse>;
+  callModel(request: ModelRequest): Promise<ModelResponse>;
 }
 
 export function composeSystemPrompt(
