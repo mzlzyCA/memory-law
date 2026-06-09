@@ -6,9 +6,9 @@ import { createInitialGlobalState } from "./storage/globalState";
 import { runArrangedTools, type ArrangedToolCall } from "./tools/runArrangedTools";
 import type {
   AgentMessage,
+  UICliMessage,
   ToolResultMessage,
   ToolUseMessage,
-  UiCliMessage,
   UserMessage,
 } from "./types/messages";
 import type {
@@ -51,6 +51,7 @@ export interface QueryParams {
   workspacePath: string;
   iteration: number;
   maxIterations: number;
+  initialUserMessage?: AgentMessage[];
   state?: QueryState;
   abortController?: AbortController;
 }
@@ -64,7 +65,7 @@ type ParsedModelReply = {
   }>;
 };
 
-function isTool(candidate: unknown): candidate is Tool {
+function isValidTool(candidate: unknown): candidate is Tool {
   if (!candidate || typeof candidate !== "object") {
     return false;
   }
@@ -77,9 +78,9 @@ function isTool(candidate: unknown): candidate is Tool {
   );
 }
 
-function toToolRegistry(rawTools: unknown[]): Tools {
+function buildToolRegistry(rawTools: unknown[]): Tools {
   return rawTools.reduce<Tools>((acc, candidate) => {
-    if (!isTool(candidate)) {
+    if (!isValidTool(candidate)) {
       return acc;
     }
     if (typeof candidate.isEnabled === "function" && !candidate.isEnabled()) {
@@ -90,7 +91,7 @@ function toToolRegistry(rawTools: unknown[]): Tools {
   }, {});
 }
 
-function createDefaultToolUseContext(args: {
+function createToolUseContext(args: {
   abortController: AbortController;
   tools: Tools;
 }): ToolUseContext {
@@ -119,12 +120,11 @@ function makeUserMessage(content: string): UserMessage {
     message: {
       role: "user",
       content,
-    },
-    origin: "query",
+    }
   };
 }
 
-function ensureState(params: QueryParams, tools: Tools, abortController: AbortController): QueryState {
+function resolveQueryState(params: QueryParams, tools: Tools, abortController: AbortController): QueryState {
   const existing = params.state;
   if (existing) {
     existing.toolUseContext.options.tools = tools;
@@ -132,12 +132,17 @@ function ensureState(params: QueryParams, tools: Tools, abortController: AbortCo
     return existing;
   }
 
-  const toolUseContext = createDefaultToolUseContext({ abortController, tools });
+  const initialMessages =
+    params.initialUserMessage && params.initialUserMessage.length > 0
+      ? params.initialUserMessage
+      : [makeUserMessage(params.prompt)];
+
+  const toolUseContext = createToolUseContext({ abortController, tools });
   return {
     compacted: false,
     turnCounter: Math.max(0, params.iteration - 1),
     turnId: randomUUID(),
-    messages: [makeUserMessage(params.prompt)],
+    messages: initialMessages,
     toolUseContext,
     turncount: false,
     transitionFlag: undefined,
@@ -150,11 +155,12 @@ function throwIfAborted(controller?: AbortController): void {
   }
 }
 
-function injectSkills(_context: ToolUseContext): void {
+function applyRuntimeSkills(_context: ToolUseContext): void {
   // TODO: inject runtime skills into toolUseContext before model call.
 }
 
-function sanitizeToolResultMessages(messages: AgentMessage[]): AgentMessage[] {
+function sanitizeToolMessages(messages: AgentMessage[]): AgentMessage[] {
+  // Clear tool results output and content to avoid token overload and potential PII leakage, while keeping the message structure for compacting and summarization to work effectively.
   return messages.map((message) => {
     if (message.type !== "tool_result") {
       return message;
@@ -173,37 +179,33 @@ function sanitizeToolResultMessages(messages: AgentMessage[]): AgentMessage[] {
   });
 }
 
-function injectToolUseContextIntoMessages(messages: AgentMessage[], context: ToolUseContext): AgentMessage[] {
-  const toolNames = Object.keys(context.options.tools);
-  const hintMessage: UiCliMessage = {
-    uuid: randomUUID(),
-    type: "ui_message",
-    timestamp: new Date().toISOString(),
-    uiType: "cli_message",
-    message: {
-      role: "system",
-      content: `Tool context: ${toolNames.join(", ") || "none"}. nonInteractive=${String(
-        context.options.isNonInteractiveSession,
-      )}`,
-    },
-    blocks: [],
-  };
-
-  // TODO: inject context by message category (user/tool_use/tool_result/ui_message).
-  return [...messages, hintMessage];
+function attachToolContext(messages: AgentMessage[], _context: ToolUseContext): AgentMessage[] {
+  // Tool ask/reply should stay in user/assistant/tool messages, not UI-only cli messages.
+  return messages;
 }
 
-function toPrompt(messages: AgentMessage[], fallbackPrompt: string): string {
+function buildPromptText(messages: AgentMessage[], fallbackPrompt: string): string {
   if (messages.length === 0) {
     return fallbackPrompt;
   }
 
   return messages
     .map((message) => {
-      const content =
-        typeof message.message.content === "string"
-          ? message.message.content
-          : JSON.stringify(message.message.content);
+      const content = (() => {
+        if (typeof message.message.content === "string") {
+          return message.message.content;
+        }
+        return JSON.stringify(message.message.content);
+      })();
+
+      if (message.type === "tool_use") {
+        return `[tool_use|${message.message.role}] tool=${message.toolName} toolCallId=${message.toolCallId} input=${JSON.stringify(message.input)}`;
+      }
+
+      if (message.type === "tool_result") {
+        return `[tool_result|${message.message.role}] tool=${message.toolName} toolCallId=${message.toolCallId} output=${JSON.stringify(message.output)}`;
+      }
+
       return `[${message.type}|${message.message.role}] ${content}`;
     })
     .join("\n");
@@ -272,7 +274,7 @@ function postProcessModelReply(args: {
   arrangedCalls: ArrangedToolCall[];
   parentMessage: AssistantMessage;
 } {
-  const assistantMessage: AgentMessage = {
+  const assistantMessage: UICliMessage = {
     uuid: randomUUID(),
     type: "ui_message",
     timestamp: new Date().toISOString(),
@@ -310,6 +312,7 @@ function postProcessModelReply(args: {
     arrangedCalls.push({
       tool,
       input: call.input,
+      toolCallId: call.toolCallId,
     });
   }
 
@@ -326,33 +329,34 @@ function postProcessModelReply(args: {
   };
 }
 
-function appendToolResultMessage(args: {
+function recordToolResult(args: {
   state: QueryState;
   call: ArrangedToolCall;
   index: number;
   result: ToolResult<unknown>;
 }): void {
+  const toolError = "error" in args.result ? args.result.error : "";
   const toolResultMessage: ToolResultMessage = {
     uuid: randomUUID(),
     type: "tool_result",
     timestamp: new Date().toISOString(),
     toolName: args.call.tool.name,
-    toolCallId: `${args.call.tool.name}-${args.state.turnId}-${args.index}`,
+    toolCallId: args.call.toolCallId,
     output: args.result.ok
       ? { ok: true, data: args.result.output }
-      : { ok: false, error: args.result.error, data: args.result.output ?? null },
+      : { ok: false, error: toolError, data: args.result.output ?? null },
     message: {
       role: "tool",
       content: args.result.ok
         ? `Tool ${args.call.tool.name} succeeded.`
-        : `Tool ${args.call.tool.name} failed: ${args.result.error}`,
+        : `Tool ${args.call.tool.name} failed: ${toolError}`,
     },
   };
 
   args.state.messages.push(toolResultMessage);
 }
 
-function summarizeToolUseTurn(args: {
+function buildTurnSummary(args: {
   state: QueryState;
   calls: ArrangedToolCall[];
   results: ToolResult<unknown>[];
@@ -364,13 +368,14 @@ function summarizeToolUseTurn(args: {
         return `${call.tool.name}:missing_result`;
       }
       if (!result.ok) {
-        return `${call.tool.name}:error(${result.error})`;
+        const resultError = "error" in result ? result.error : "unknown_error";
+        return `${call.tool.name}:error(${resultError})`;
       }
       return `${call.tool.name}:ok`;
     })
     .join("; ");
 
-  const summaryMessage: UiCliMessage = {
+  const summaryMessage: UICliMessage = {
     uuid: randomUUID(),
     type: "ui_message",
     timestamp: new Date().toISOString(),
@@ -390,8 +395,8 @@ export async function query(params: QueryParams): Promise<QueryResult> {
   const { provider, model } = parseProviderAndModel(params.model);
   const adapter = createProvider(provider);
   const abortController = params.abortController ?? new AbortController();
-  const tools = toToolRegistry(params.tools);
-  const stateRef = ensureState(params, tools, abortController);
+  const tools = buildToolRegistry(params.tools);
+  const stateRef = resolveQueryState(params, tools, abortController);
 
   stateRef.toolUseContext.messages = stateRef.messages;
 
@@ -405,10 +410,10 @@ export async function query(params: QueryParams): Promise<QueryResult> {
     stateRef.turncount = true;
     stateRef.turnId = randomUUID();
 
-    injectSkills(stateRef.toolUseContext);
+    applyRuntimeSkills(stateRef.toolUseContext);
 
     const messagesFromQuery = params.state?.messages ?? stateRef.messages;
-    const sanitized = sanitizeToolResultMessages(messagesFromQuery);
+    const sanitized = sanitizeToolMessages(messagesFromQuery);
     const compacted = Defaultcompact({
       messages: sanitized,
       contextWindow: adapter.getContextWindow(model),
@@ -417,14 +422,14 @@ export async function query(params: QueryParams): Promise<QueryResult> {
     stateRef.toolUseContext.messages = stateRef.messages;
     stateRef.compacted = compacted.length < sanitized.length;
 
-    const modelMessages = injectToolUseContextIntoMessages(
+    const modelMessages = attachToolContext(
       compacted,
       stateRef.toolUseContext,
     );
 
     const response = await adapter.callModel({
       model,
-      prompt: toPrompt(modelMessages, params.prompt),
+      prompt: buildPromptText(modelMessages, params.prompt),
       systemPrompt: [
         params.systemPrompt,
         `Description: ${params.description}`,
@@ -456,7 +461,7 @@ export async function query(params: QueryParams): Promise<QueryResult> {
       parentMessage,
       onEachResult: async (toolResultArgs) => {
         const { call, result, index } = toolResultArgs;
-        appendToolResultMessage({
+        recordToolResult({
           state: stateRef,
           call,
           index,
@@ -467,7 +472,7 @@ export async function query(params: QueryParams): Promise<QueryResult> {
 
     throwIfAborted(abortController);
 
-    const summary = summarizeToolUseTurn({
+    const summary = buildTurnSummary({
       state: stateRef,
       calls: arrangedCalls,
       results: toolResults,

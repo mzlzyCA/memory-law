@@ -101,17 +101,8 @@ export function shouldCompact(
 }
 
 function makeSummaryMessage(summaryText: string): AgentMessage {
-  return {
-    uuid: `compact-${Date.now()}`,
-    type: "ui_message",
-    timestamp: new Date().toISOString(),
-    uiType: "cli_message",
-    message: {
-      role: "system",
-      content: `Conversation summary:\n${summaryText}`,
-    },
-    blocks: [],
-  };
+ //TODO
+ return null as unknown as AgentMessage;
 }
 
 async function fallbackSummary(messages: AgentMessage[], tokenBudget: number): Promise<string> {

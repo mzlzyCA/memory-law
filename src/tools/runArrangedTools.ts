@@ -12,6 +12,7 @@ type ToolInput = Record<string, unknown>;
 export type ArrangedToolCall = {
   tool: Tool;
   input: ToolInput;
+  toolCallId: string;
 };
 
 export type RunToolsArgs = {

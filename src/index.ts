@@ -10,7 +10,7 @@ import {
   type GlobalState,
 } from "./storage/globalState";
 import { DEFAULT_AGENT_CONFIG } from "./types/agent";
-import type { UserMessage } from "./types/messages";
+import type { AssistantMessage, UserMessage } from "./types/messages";
 import {
   ensureCliStorageDirs,
   getAgentSessionTmpDir,
@@ -150,16 +150,37 @@ Options:
 `);
 }
 
-function createCliUserMessage(content: string): UserMessage {
+
+function createAssistantMessage(model: string): AssistantMessage {
+  return {
+    uuid: randomUUID(),
+    type: "assistant",
+    timestamp: new Date().toISOString(),
+    message: {
+      id: randomUUID(),
+      container: null,
+      model,
+      role: "assistant",
+      stop_reason: null,
+      stop_sequence: null,
+      type: "message",
+      usage: {},
+      content: [{ type: "text", text: "Assistant context initialized." }],
+      context_management: null,
+    },
+    isVirtual: true,
+  };
+}
+
+function createUserMessage(prompt: string): UserMessage {
   return {
     uuid: randomUUID(),
     type: "user",
     timestamp: new Date().toISOString(),
     message: {
       role: "user",
-      content,
+      content: prompt,
     },
-    origin: "cli",
   };
 }
 
@@ -194,7 +215,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<{
   result: RunAgentResult;
 }> {
   const args = parseCliArgs(argv);
-  const userMessage = createCliUserMessage(args.message);
+  const assistantMessage = createAssistantMessage(args.model);
+  const userMessage = createUserMessage(args.message);
   const globalState = createRuntimeGlobalState(args);
   const systemPrompt = buildSystemPrompt(args.systemPrompt, globalState);
 
@@ -207,6 +229,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<{
       typeof userMessage.message.content === "string"
         ? userMessage.message.content
         : JSON.stringify(userMessage.message.content),
+    initialUserMessage: [assistantMessage, userMessage],
     systemPrompt,
     tools: [],
     description: args.description,

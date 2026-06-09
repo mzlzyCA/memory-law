@@ -1,11 +1,13 @@
 import { query } from "./query";
 import { persistAgentSession } from "./writefile";
+import type { AgentMessage } from "./types/messages";
 
 export interface AgentParams {
   model: string;
   workspacePath: string;
   max_iterations: number;
   prompt: string;
+  initialUserMessage?: AgentMessage[];
   systemPrompt: string;
   tools: unknown[];
   description: string;
@@ -25,6 +27,7 @@ export async function runAgent(params: AgentParams): Promise<RunAgentResult> {
   const result = await query({
     model: params.model,
     prompt: params.prompt,
+    initialUserMessage: params.initialUserMessage,
     systemPrompt: params.systemPrompt,
     tools: params.tools,
     description: params.description,
