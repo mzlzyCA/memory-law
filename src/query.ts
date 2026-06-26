@@ -6,13 +6,13 @@ import { createInitialGlobalState } from "./storage/globalState";
 import { runArrangedTools, type ArrangedToolCall } from "./tools/runArrangedTools";
 import type {
   AgentMessage,
+  UserMessage as AgentUserMessage,
   UICliMessage,
-  ToolResultMessage,
   ToolUseMessage,
   UserMessage,
 } from "./types/messages";
 import type {
-  AssistantMessage,
+  AssistantMessage as ParentAssistantMessage,
   Tool,
   ToolResult,
   ToolUseContext,
@@ -162,13 +162,16 @@ function applyRuntimeSkills(_context: ToolUseContext): void {
 function sanitizeToolMessages(messages: AgentMessage[]): AgentMessage[] {
   // Clear tool results output and content to avoid token overload and potential PII leakage, while keeping the message structure for compacting and summarization to work effectively.
   return messages.map((message) => {
-    if (message.type !== "tool_result") {
+    if (message.type !== "user" || !message.tool_result) {
       return message;
     }
 
-    const sanitized: ToolResultMessage = {
+    const sanitized: AgentUserMessage = {
       ...message,
-      output: {},
+      tool_result: {
+        ...message.tool_result,
+        output: {},
+      },
       message: {
         ...message.message,
         content: "",
@@ -191,6 +194,10 @@ function buildPromptText(messages: AgentMessage[], fallbackPrompt: string): stri
 
   return messages
     .map((message) => {
+      if (message.type === "user" && message.tool_result) {
+        return `[tool_result|user] tool=${message.tool_result.toolName} toolCallId=${message.tool_result.toolCallId} output=${JSON.stringify(message.tool_result.output)}`;
+      }
+
       const content = (() => {
         if (typeof message.message.content === "string") {
           return message.message.content;
@@ -200,10 +207,6 @@ function buildPromptText(messages: AgentMessage[], fallbackPrompt: string): stri
 
       if (message.type === "tool_use") {
         return `[tool_use|${message.message.role}] tool=${message.toolName} toolCallId=${message.toolCallId} input=${JSON.stringify(message.input)}`;
-      }
-
-      if (message.type === "tool_result") {
-        return `[tool_result|${message.message.role}] tool=${message.toolName} toolCallId=${message.toolCallId} output=${JSON.stringify(message.output)}`;
       }
 
       return `[${message.type}|${message.message.role}] ${content}`;
@@ -272,7 +275,7 @@ function postProcessModelReply(args: {
 }): {
   assistantMessage: AgentMessage;
   arrangedCalls: ArrangedToolCall[];
-  parentMessage: AssistantMessage;
+  parentMessage: ParentAssistantMessage;
 } {
   const assistantMessage: UICliMessage = {
     uuid: randomUUID(),
@@ -336,20 +339,26 @@ function recordToolResult(args: {
   result: ToolResult<unknown>;
 }): void {
   const toolError = "error" in args.result ? args.result.error : "";
-  const toolResultMessage: ToolResultMessage = {
+  const toolResultMessage: AgentUserMessage = {
     uuid: randomUUID(),
-    type: "tool_result",
+    type: "user",
     timestamp: new Date().toISOString(),
-    toolName: args.call.tool.name,
-    toolCallId: args.call.toolCallId,
-    output: args.result.ok
-      ? { ok: true, data: args.result.output }
-      : { ok: false, error: toolError, data: args.result.output ?? null },
     message: {
-      role: "tool",
+      role: "user",
       content: args.result.ok
         ? `Tool ${args.call.tool.name} succeeded.`
         : `Tool ${args.call.tool.name} failed: ${toolError}`,
+    },
+    toolUseResult: args.result.ok
+      ? { ok: true, data: args.result.output }
+      : { ok: false, error: toolError, data: args.result.output ?? null },
+    tool_result: {
+      marker: "tool_result",
+      toolName: args.call.tool.name,
+      toolCallId: args.call.toolCallId,
+      output: args.result.ok
+        ? { ok: true, data: args.result.output }
+        : { ok: false, error: toolError, data: args.result.output ?? null },
     },
   };
 

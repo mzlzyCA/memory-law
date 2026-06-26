@@ -1,5 +1,5 @@
 import { z } from "zod";
-
+import type { ToolOutput } from "./tool";
 export type UUID = string;
 
 export type MessageRole = "user" | "assistant" | "system" | "tool";
@@ -9,7 +9,7 @@ export type MessageContent = string | ContentBlockParam[];
 
 export type PermissionMode = "default" | "acceptEdits" | "bypassPermissions";
 
-export type MessageType = "assistant" | "user" | "tool_use" | "tool_result" | "ui_message";
+export type MessageType = "assistant" | "user" | "tool_use" | "ui_message";
 
 export type UIMessageType = "pop_up_message" | "cli_message";
 
@@ -66,6 +66,13 @@ export interface UserMessage extends BaseMessage {
     role: "user";
     content: MessageContent;
   };
+  tool_result?: {
+    marker: "tool_result";
+    toolName: string;
+    toolCallId: string;
+    output: Record<string, unknown>;
+    schema?: ToolOutput;
+  };
 
   // Tool-result related fields.
   toolUseResult?: unknown;
@@ -88,18 +95,6 @@ export interface ToolUseMessage extends BaseMessage {
   input: Record<string, unknown>;
 }
 
-export interface ToolResultMessage extends BaseMessage {
-  type: "tool_result";
-  message: {
-    role: "tool";
-    content: MessageContent;
-  };
-  toolName: string;
-  toolCallId: string;
-  output: Record<string, unknown>;
-  schema?: ToolResultSchema;
-}
-
 export interface UICliMessage extends BaseMessage {
   type: "ui_message";
   message: {
@@ -114,69 +109,6 @@ export type AgentMessage =
   | AssistantMessage
   | UserMessage
   | ToolUseMessage
-  | ToolResultMessage
-  | UICliMessage
-
-export const toolResultSchema = z.object({
-  requiredKeys: z.array(z.string()).optional(),
-  keyTypes: z
-    .record(
-      z.string(),
-      z.enum(["string", "number", "boolean", "object", "array"]),
-    )
-    .optional(),
-});
-export type ToolResultSchema = z.infer<typeof toolResultSchema>;
-
-function resolveValueType(
-  value: unknown,
-): "string" | "number" | "boolean" | "object" | "array" | "unknown" {
- if (value === null) return "unknown";
-  return (["string", "number", "boolean", "object"].includes(typeof value)
-    ? (typeof value as "string" | "number" | "boolean" | "object")
-    : "unknown");
-}
+  | UICliMessage;
 
 
-export function validateToolResult(
-  output: Record<string, unknown>,
-  schemaInput?: unknown,
-): { valid: boolean; errors: string[] } {
-  if (schemaInput == null) {
-    return { valid: true, errors: [] };
-  }
-
-  const parsedSchema = toolResultSchema.safeParse(schemaInput);
-  if (!parsedSchema.success) {
-    return {
-      valid: false,
-      errors: parsedSchema.error.issues.map((issue) => issue.message),
-    };
-  }
-
-  const schema = parsedSchema.data;
-  const errors: string[] = [];
-
-  for (const key of schema.requiredKeys ?? []) {
-    if (!(key in output)) {
-      errors.push(`Missing required key: ${key}`);
-    }
-  }
-
-  for (const [key, expectedType] of Object.entries(schema.keyTypes ?? {})) {
-    if (!(key in output)) {
-      continue;
-    }
-    const actualType = resolveValueType(output[key]);
-    if (actualType !== expectedType) {
-      errors.push(
-        `Type mismatch for key "${key}": expected ${expectedType}, got ${actualType}`,
-      );
-    }
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
-}

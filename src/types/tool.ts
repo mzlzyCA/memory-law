@@ -141,3 +141,83 @@ export type Tool<
     context: ToolUseContext,
   ): Promise<PermissionResult>; // Check runtime permissions before execution
 };
+
+export type DefaultableToolKeys =
+  | "isEnabled"
+  | "isConcurrencySafe"
+  | "isReadOnly"
+  | "isDestructive"
+  | "checkPermissions";
+
+export type ToolDef<
+  Input extends AnyObject = AnyObject,
+  Output = unknown,
+  P extends ToolProgressData = ToolProgressData,
+> = Omit<Tool<Input, Output, P>, DefaultableToolKeys> &
+  Partial<Pick<Tool<Input, Output, P>, DefaultableToolKeys>>;
+
+const TOOL_DEFAULTS = {
+  isEnabled: () => true,
+  isConcurrencySafe: (_input?: unknown) => false,
+  isReadOnly: (_input?: unknown) => false,
+  isDestructive: (_input?: unknown) => false,
+  checkPermissions: (
+    _input: Record<string, unknown>,
+    _ctx: ToolUseContext,
+  ): Promise<PermissionResult> => Promise.resolve({ allowed: true }),
+};
+
+type ToolDefaults = typeof TOOL_DEFAULTS;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyToolDef = ToolDef<any, any, any>;
+
+type BuiltTool<D> = Omit<D, DefaultableToolKeys> & {
+  [K in DefaultableToolKeys]-?: K extends keyof D
+    ? undefined extends D[K]
+      ? ToolDefaults[K]
+      : D[K]
+    : ToolDefaults[K];
+};
+
+export function buildTool<D extends AnyToolDef>(def: D): BuiltTool<D> {
+  return {
+    ...TOOL_DEFAULTS,
+    ...def,
+  } as BuiltTool<D>;
+}
+
+export const lazySchema = <T extends z.ZodTypeAny>(factory: () => T) => factory;
+
+export const toolInputSchema = lazySchema(() =>
+  z.strictObject({
+    pattern: z
+      .string()
+      .default("**/*")
+      .describe("The glob pattern to match files against"),
+    path: z
+      .string()
+      .default(".")
+      .describe(
+        'The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.',
+      ),
+  }),
+);
+
+export type ToolInputSchema = ReturnType<typeof toolInputSchema>;
+export type ToolInput = z.infer<ToolInputSchema>;
+
+export const toolOutputSchema = lazySchema(() =>
+  z.object({
+    requiredKeys: z.array(z.string()).default([]),
+    keyTypes: z
+      .record(
+        z.string(),
+        z.enum(["string", "number", "boolean", "object", "array"]),
+      )
+      .default({}),
+  }),
+);
+
+export type ToolOutputSchema = ReturnType<typeof toolOutputSchema>;
+export type ToolOutput = z.infer<ToolOutputSchema>;

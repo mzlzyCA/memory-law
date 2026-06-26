@@ -11,6 +11,8 @@ import {
 } from "./storage/globalState";
 import { DEFAULT_AGENT_CONFIG } from "./types/agent";
 import type { AssistantMessage, UserMessage } from "./types/messages";
+import { defaultTool } from "./tools/defaultTools/defaultTool/DefaultTool";
+import { nodeNotifierTool } from "./tools/defaultTools/nodeNotifierTool/NodeNotifierTool";
 import {
   ensureCliStorageDirs,
   getAgentSessionTmpDir,
@@ -231,7 +233,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<{
         : JSON.stringify(userMessage.message.content),
     initialUserMessage: [assistantMessage, userMessage],
     systemPrompt,
-    tools: [],
+    tools: [defaultTool, nodeNotifierTool],
     description: args.description,
   });
 
